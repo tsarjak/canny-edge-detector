@@ -7,8 +7,34 @@ from PIL import Image
 # matplotlib for displaying the processed image
 import matplotlib.pyplot as plt
 
-# To calculate the total processing time
-import time
+# For passing arguments from command-line
+import argparse
+
+# To Ignore the warnings of NaN/NaN calculations by numpy
+np.warnings.filterwarnings('ignore')
+
+path = ''
+prop = 30
+
+def parse_args():
+	'''
+	Reads the commands from terminal for image path and ptiling proportion
+	'''
+
+	# Desription for the code
+	parser = argparse.ArgumentParser(description='Canny Edge Detector Program for Computer Vision Project - Sarjak Pankaj Thakkar - SPT308')
+
+	# Adding the Argument to read the path of the image
+	parser.add_argument('--imagePath', type=str, help='Path of your image to be processed')
+
+	# Adding the Argument to read the ptiling proportion for processing
+	parser.add_argument('--ptilingprop', type=float, help='Ptiling proportion to be used for edges')
+
+	# Storing all the read arguments into a variable to return
+	args = parser.parse_args()
+
+	# Return all the read arguments
+	return args
 
 def readImage(path):
 	'''
@@ -179,19 +205,19 @@ def nonMaximaSuppression(magnitude, angle):
 
 			# No need of else statement (in nested if conditions) as entire matrix is initially set to zero
 
-			if -22.5 < currAngle < 22.5 or currAngle < -157.5 or currAngle > 157.5: # Case 0
+			if -22.5 <= currAngle <= 22.5 or currAngle <= -157.5 or currAngle >= 157.5: # Case 0
 				if currMagnitude >= np.amax([currMagnitude, magnitude[x+1,y], magnitude[x-1,y]]):
 					output[x,y] = currMagnitude
 
-			elif 22.5 < currAngle < 67.5 or -112.5 > currAngle > -157.5: # Case 1
+			elif 22.5 <= currAngle <= 67.5 or -112.5 >= currAngle >= -157.5: # Case 1
 				if currMagnitude >= np.amax([currMagnitude, magnitude[x+1,y-1], magnitude[x-1,y+1]]):
 					output[x,y] = currMagnitude
 
-			elif 67.5 < currAngle < 112.5 or -67.5 > currAngle > -112.5: # Case 2
+			elif 67.5 <= currAngle <= 112.5 or -67.5 >= currAngle >= -112.5: # Case 2
 				if currMagnitude >= np.amax([currMagnitude, magnitude[x,y-1], magnitude[x,y+1]]):
 					output[x,y] = currMagnitude
 
-			elif 112.5 < currAngle < 157.5 or -22.5 > currAngle > -67.5: # Case 3
+			elif 112.5 <= currAngle <= 157.5 or -22.5 >= currAngle >= -67.5: # Case 3
 				if currMagnitude >= np.amax([currMagnitude, magnitude[x-1,y-1], magnitude[x+1,y+1]]):
 					output[x,y] = currMagnitude
 
@@ -211,7 +237,7 @@ def generate_histogram(img):
 	'''
 
 	# Create an empty histogram for future increments
-	histogram = np.zeros(256)
+	histogram = np.zeros(360)
 	nonZeroPixels = 0
 
 	# Iterating through each pixel
@@ -239,7 +265,7 @@ def findThreshold(nonZeroPixels, histogram, proportion):
 			  values - threshold value
 	'''
 
-	i = 255
+	i = 359
 	total = 0
 	breakFlag = False
 
@@ -272,6 +298,9 @@ def ptiling(img, threshold):
 			  value - thesholded image
 	'''
 
+	# Variable to keep count of number of pixels in the edges
+	numEdge = 0
+
 	# Loop over every pixel in the image
 	for x in range(0, img.shape[0]):
 		for y in range(0, img.shape[1]):
@@ -281,55 +310,85 @@ def ptiling(img, threshold):
 				img[x,y] = 0
 			else :
 				img[x,y] = 255
+				numEdge += 1
 
 	# Return processed image
-	return img
+	return img, numEdge
 
 def main():
-
-	# Declaring the path of Image to be processed
-	path = "zebra-crossing-1.bmp"
 
 	# Reading the image
 	img = readImage(path)
 
 	# Applying Gaussian smoothening to the Image
-	img = applyGaussian(img)
+	imgGaus = applyGaussian(img)
+	saveImg = Image.fromarray(img).convert("RGB")
+	saveImg.save(path[:-4] + "_Gaussian" + ".jpg")
 
 	# Calculating Gradient-X and Gradient Y for the Image
-	gX, gY = applyGradient(img)
+	gX, gY = applyGradient(imgGaus)
+	print("Max Gradient X : ", np.amax(gX))
+	saveImg = Image.fromarray(gX).convert("RGB")
+	saveImg.save(path[:-4] + "_GradientX" + ".jpg")
+
+	print("Max Gradient Y : ", np.amax(gY))
+	saveImg = Image.fromarray(gY).convert("RGB")
+	saveImg.save(path[:-4] + "_GradientY" + ".jpg")
 
 	# Calculating the Gradient Magnitude for the image
 	magnitude = calculateGradMag(gX, gY)
 
 	# Taking the rounded values of magnitude and ignoring the decimal points
-	img = np.round(magnitude)
+	magnitude = np.around(magnitude)
+	saveImg = Image.fromarray(magnitude).convert("RGB")
+	saveImg.save(path[:-4] + "_Gradient_Magnitude" + ".jpg")
+	print("Max Magnitude : ",np.amax(magnitude))
 
 	# Calculating the Gradient-Angle for each pixel value
 	angle = calcGradAngle(gX,gY)
 
 	# Applying non-maxima suppression to the image
-	img = nonMaximaSuppression(img,angle)
+	nonMaxima = nonMaximaSuppression(magnitude,angle)
+	saveImg = Image.fromarray(nonMaxima).convert("RGB")
+	saveImg.save(path[:-4] + "_nonMaximaSuppressed" + ".jpg")
 
 	# Calculating the histogram and the number of non-zero pixels in the image
-	histogram, nonZeroPixels = generate_histogram(img)
+	histogram, nonZeroPixels = generate_histogram(nonMaxima)
 
 	# Finding the threshold using the ptiling method
-	threshold = findThreshold(nonZeroPixels, histogram, 0.1)
+	threshold = findThreshold(nonZeroPixels, histogram, prop/100)
+	print("Threshold value : ", threshold)
 
 	# Applying the theshold for the image based on ptiling
-	img = ptiling(img, threshold)
+	edgedimg, numEdges = ptiling(nonMaxima, threshold)
+	print("Number of pixels in edge of the image ", numEdges)
 
 	# Saving the image
-	saveImg = Image.fromarray(img).convert("RGB")
-	saveImg.save(path + "_processed.jpg")
+	saveImg = Image.fromarray(edgedimg).convert("RGB")
+	saveImg.save(path[:-4] + "_processed_" + str(prop) + "%_Threshold=" + str(threshold) + ".jpg")
 
 	# Displaying the processed image
-	plt.imshow(img, cmap='gray')
+	plt.imshow(edgedimg, cmap='gray')
 	plt.show()
 
 if __name__ == '__main__':
-	tic = time.clock()
-	main()
-	toc = time.clock()
-	print("TIME TAKEN : ", toc-tic)
+
+	# Reading the arguments from the Argument parser function
+	user_choice = parse_args()
+
+	# If no filepath of image given, return error. Else assign to path
+	if not user_choice.imagePath:
+		print('Error - No filename entered')
+	else:
+		path =  user_choice.imagePath
+		print("Opening image at ", path)
+
+		# If no ptiling proportion given, set the default proportion to 30%. Else, assign to specified
+		if not user_choice.ptilingprop:
+			print("Using default Ptiling Proporation of 30%")
+		else:
+			prop = user_choice.ptilingprop
+			print("Using ptiling proportion ", prop)
+
+		# Call the main function
+		main()
